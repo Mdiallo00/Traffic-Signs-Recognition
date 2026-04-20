@@ -3,6 +3,9 @@ import copy
 import pandas as pd
 from PIL import Image
 
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -21,7 +24,7 @@ epochs_stage2 = 5
 
 # Build paths relative to this Python file
 
-
+ 
 # base_dir = os.path.dirname(os.path.abspath(__file__))
 # root_dir = os.path.join(base_dir, "archive")
 
@@ -351,3 +354,82 @@ print(f"\nFinal Test Accuracy: {test_acc:.4f}")
 model_path = os.path.join(base_dir, "resnet18_gtsrb_transfer.pth")
 torch.save(model.state_dict(), model_path)
 print(f"Model saved successfully at: {model_path}")
+
+
+
+
+
+
+
+# ADDED FEATURES
+
+# -----------------------------
+# DETAILED TEST EVALUATION
+# -----------------------------
+def evaluate_with_details(model, loader):
+    model.eval()
+    all_labels = []
+    all_preds = []
+
+    with torch.no_grad():
+        for inputs, labels in loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+
+            all_labels.extend(labels.cpu().numpy())
+            all_preds.extend(preds.cpu().numpy())
+
+    acc = accuracy_score(all_labels, all_preds)
+    cm = confusion_matrix(all_labels, all_preds)
+    report = classification_report(all_labels, all_preds, digits=4)
+
+    return acc, cm, report, all_labels, all_preds
+
+test_acc, cm, report, all_labels, all_preds = evaluate_with_details(model, test_loader)
+
+print(f"\nFinal Test Accuracy: {test_acc:.4f}")
+print("\nClassification Report:")
+print(report)
+
+
+
+# Added features
+
+
+
+# -----------------------------
+# PLOT CONFUSION MATRIX
+# -----------------------------
+plt.figure(figsize=(16, 12))
+plt.imshow(cm, interpolation='nearest')
+plt.title("Confusion Matrix - ResNet18 on GTSRB")
+plt.colorbar()
+plt.xlabel("Predicted Label")
+plt.ylabel("True Label")
+plt.show()
+
+
+plt.figure(figsize=(16, 12))
+plt.imshow(cm, interpolation='nearest')
+plt.title("Confusion Matrix - ResNet18 on GTSRB")
+plt.colorbar()
+plt.xlabel("Predicted Label")
+plt.ylabel("True Label")
+plt.tight_layout()
+plt.savefig("confusion_matrix_resnet18.png")
+plt.show()
+
+
+
+
+with open("classification_report_resnet18.txt", "w") as f:
+    f.write(f"Final Test Accuracy: {test_acc:.4f}\n\n")
+    f.write("Classification Report:\n")
+    f.write(report)
+
+print("Classification report saved successfully!")
+
+
