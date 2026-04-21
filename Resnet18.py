@@ -12,6 +12,9 @@ from torchvision import transforms, models
 # -----------------------------
 # CONFIG
 # -----------------------------
+# -----------------------------
+# CONFIG
+# -----------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_classes = 43
@@ -20,13 +23,8 @@ epochs_stage1 = 5
 epochs_stage2 = 5
 
 # Build paths relative to this Python file
-
-
-# base_dir = os.path.dirname(os.path.abspath(__file__))
-# root_dir = os.path.join(base_dir, "archive")
-
 base_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = base_dir
+root_dir = os.path.join(base_dir, "archive")
 train_csv_path = os.path.join(root_dir, "Train.csv")
 test_csv_path = os.path.join(root_dir, "Test.csv")
 
