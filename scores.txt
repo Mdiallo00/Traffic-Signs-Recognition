@@ -1,0 +1,11 @@
+knn stock: t: 0.91 v: 0.84
+knn opt: t: 0.95 v: 0.9
+
+rf stock: t: 1 v: 0.974
+rf opt t: 1 v: 0.977
+
+hog / lin stock: t: 0.94, v: 0.79
+hog / lin opt: t: 0.999 v: 0.89
+
+Rn18 stock: t: 0.996 v: 0.92
+Rn18 opt t: 0.997 V: 0.94
