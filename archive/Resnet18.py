@@ -1,3 +1,361 @@
+# import os
+# import copy
+# import pandas as pd
+# from PIL import Image
+
+# import torch
+# import torch.nn as nn
+# import torch.optim as optim
+# from torch.utils.data import Dataset, DataLoader, random_split
+# from torchvision import transforms, models
+
+# # -----------------------------
+# # CONFIG
+# # -----------------------------
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# num_classes = 43
+# batch_size = 32
+# epochs_stage1 = 5
+# epochs_stage2 = 5
+
+# # Build paths relative to this Python file
+
+
+# # base_dir = os.path.dirname(os.path.abspath(__file__))
+# # root_dir = os.path.join(base_dir, "archive")
+
+# base_dir = os.path.dirname(os.path.abspath(__file__))
+# root_dir = base_dir
+# train_csv_path = os.path.join(root_dir, "Train.csv")
+# test_csv_path = os.path.join(root_dir, "Test.csv")
+
+# print("Current device:", device)
+# print("Base directory:", base_dir)
+# print("Root directory:", root_dir)
+
+# # Quick path checks
+# if not os.path.exists(root_dir):
+#     raise FileNotFoundError(f"Could not find dataset folder: {root_dir}")
+
+# if not os.path.exists(train_csv_path):
+#     raise FileNotFoundError(f"Could not find Train.csv: {train_csv_path}")
+
+# if not os.path.exists(test_csv_path):
+#     raise FileNotFoundError(f"Could not find Test.csv: {test_csv_path}")
+
+# print("Files inside archive folder:")
+# print(os.listdir(root_dir))
+
+# # -----------------------------
+# # TRANSFORMS
+# # -----------------------------
+# train_transform = transforms.Compose([
+#     transforms.Resize((224, 224)),
+#     transforms.RandomRotation(10),
+#     transforms.RandomHorizontalFlip(),
+#     transforms.ToTensor(),
+#     transforms.Normalize(
+#         mean=[0.485, 0.456, 0.406],
+#         std=[0.229, 0.224, 0.225]
+#     )
+# ])
+
+# val_test_transform = transforms.Compose([
+#     transforms.Resize((224, 224)),
+#     transforms.ToTensor(),
+#     transforms.Normalize(
+#         mean=[0.485, 0.456, 0.406],
+#         std=[0.229, 0.224, 0.225]
+#     )
+# ])
+
+# # -----------------------------
+# # CUSTOM DATASET
+# # -----------------------------
+# class GTSRBDataset(Dataset):
+#     def __init__(self, csv_file, root_dir, transform=None):
+#         self.data = pd.read_csv(csv_file)
+#         self.root_dir = root_dir
+#         self.transform = transform
+
+#         # Make sure required columns exist
+#         required_columns = ["Path", "ClassId"]
+#         for col in required_columns:
+#             if col not in self.data.columns:
+#                 raise ValueError(
+#                     f"Column '{col}' not found in {csv_file}. "
+#                     f"Columns found: {list(self.data.columns)}"
+#                 )
+
+#     def __len__(self):
+#         return len(self.data)
+
+#     def __getitem__(self, idx):
+#         img_relative_path = self.data.iloc[idx]["Path"]
+#         label = int(self.data.iloc[idx]["ClassId"])
+
+#         img_path = os.path.join(self.root_dir, img_relative_path)
+
+#         if not os.path.exists(img_path):
+#             raise FileNotFoundError(f"Image not found: {img_path}")
+
+#         image = Image.open(img_path).convert("RGB")
+
+#         if self.transform:
+#             image = self.transform(image)
+
+#         return image, label
+
+# # -----------------------------
+# # LOAD FULL DATASETS
+# # -----------------------------
+# full_train_dataset = GTSRBDataset(
+#     csv_file=train_csv_path,
+#     root_dir=root_dir,
+#     transform=train_transform
+# )
+
+# test_dataset = GTSRBDataset(
+#     csv_file=test_csv_path,
+#     root_dir=root_dir,
+#     transform=val_test_transform
+# )
+
+# print("Total training images:", len(full_train_dataset))
+# print("Total test images:", len(test_dataset))
+
+# # -----------------------------
+# # SPLIT TRAIN INTO TRAIN + VALIDATION
+# # -----------------------------
+# train_size = int(0.8 * len(full_train_dataset))
+# val_size = len(full_train_dataset) - train_size
+
+# generator = torch.Generator().manual_seed(42)
+# train_dataset, val_dataset = random_split(
+#     full_train_dataset,
+#     [train_size, val_size],
+#     generator=generator
+# )
+
+# # Important note:
+# # random_split creates subsets that still point to the same dataset object.
+# # So changing dataset.transform affects both subsets.
+# # To avoid that issue cleanly, we rebuild separate datasets below.
+
+# train_indices = train_dataset.indices
+# val_indices = val_dataset.indices
+
+# full_train_data = pd.read_csv(train_csv_path)
+
+# train_df = full_train_data.iloc[train_indices].reset_index(drop=True)
+# val_df = full_train_data.iloc[val_indices].reset_index(drop=True)
+
+# train_split_csv = os.path.join(root_dir, "train_split_temp.csv")
+# val_split_csv = os.path.join(root_dir, "val_split_temp.csv")
+
+# train_df.to_csv(train_split_csv, index=False)
+# val_df.to_csv(val_split_csv, index=False)
+
+# train_dataset = GTSRBDataset(
+#     csv_file=train_split_csv,
+#     root_dir=root_dir,
+#     transform=train_transform
+# )
+
+# val_dataset = GTSRBDataset(
+#     csv_file=val_split_csv,
+#     root_dir=root_dir,
+#     transform=val_test_transform
+# )
+
+# print("Training split size:", len(train_dataset))
+# print("Validation split size:", len(val_dataset))
+
+# # -----------------------------
+# # DATALOADERS
+# # -----------------------------
+# train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+# val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+# test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+# # -----------------------------
+# # LOAD PRETRAINED RESNET18
+# # -----------------------------
+# model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+
+# # Freeze all pretrained layers first
+# for param in model.parameters():
+#     param.requires_grad = False
+
+# # Replace final fully connected layer
+# model.fc = nn.Linear(model.fc.in_features, num_classes)
+
+# model = model.to(device)
+
+# # -----------------------------
+# # LOSS FUNCTION + OPTIMIZER
+# # -----------------------------
+# criterion = nn.CrossEntropyLoss()
+# optimizer = optim.Adam(model.fc.parameters(), lr=0.001)
+
+# # -----------------------------
+# # TRAIN FUNCTION
+# # -----------------------------
+# def train_model(model, train_loader, val_loader, criterion, optimizer, epochs):
+#     best_weights = copy.deepcopy(model.state_dict())
+#     best_val_acc = 0.0
+
+#     history = {
+#         "train_loss": [],
+#         "train_acc": [],
+#         "val_loss": [],
+#         "val_acc": []
+#     }
+
+#     for epoch in range(epochs):
+#         print(f"\nEpoch {epoch + 1}/{epochs}")
+
+#         # ---- Training ----
+#         model.train()
+#         train_loss_total = 0.0
+#         train_correct = 0
+#         train_total = 0
+
+#         for inputs, labels in train_loader:
+#             inputs = inputs.to(device)
+#             labels = labels.to(device)
+
+#             optimizer.zero_grad()
+
+#             outputs = model(inputs)
+#             loss = criterion(outputs, labels)
+
+#             _, preds = torch.max(outputs, 1)
+
+#             loss.backward()
+#             optimizer.step()
+
+#             train_loss_total += loss.item() * inputs.size(0)
+#             train_correct += torch.sum(preds == labels).item()
+#             train_total += labels.size(0)
+
+#         train_loss = train_loss_total / train_total
+#         train_acc = train_correct / train_total
+
+#         # ---- Validation ----
+#         model.eval()
+#         val_loss_total = 0.0
+#         val_correct = 0
+#         val_total = 0
+
+#         with torch.no_grad():
+#             for inputs, labels in val_loader:
+#                 inputs = inputs.to(device)
+#                 labels = labels.to(device)
+
+#                 outputs = model(inputs)
+#                 loss = criterion(outputs, labels)
+
+#                 _, preds = torch.max(outputs, 1)
+
+#                 val_loss_total += loss.item() * inputs.size(0)
+#                 val_correct += torch.sum(preds == labels).item()
+#                 val_total += labels.size(0)
+
+#         val_loss = val_loss_total / val_total
+#         val_acc = val_correct / val_total
+
+#         history["train_loss"].append(train_loss)
+#         history["train_acc"].append(train_acc)
+#         history["val_loss"].append(val_loss)
+#         history["val_acc"].append(val_acc)
+
+#         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
+#         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f}")
+
+#         if val_acc > best_val_acc:
+#             best_val_acc = val_acc
+#             best_weights = copy.deepcopy(model.state_dict())
+
+#     model.load_state_dict(best_weights)
+#     return model, history
+
+# # -----------------------------
+# # EVALUATION FUNCTION
+# # -----------------------------
+# def evaluate(model, loader):
+#     model.eval()
+#     correct = 0
+#     total = 0
+
+#     with torch.no_grad():
+#         for inputs, labels in loader:
+#             inputs = inputs.to(device)
+#             labels = labels.to(device)
+
+#             outputs = model(inputs)
+#             _, preds = torch.max(outputs, 1)
+
+#             correct += torch.sum(preds == labels).item()
+#             total += labels.size(0)
+
+#     return correct / total
+
+# # -----------------------------
+# # STAGE 1: TRAIN FINAL CLASSIFIER ONLY
+# # -----------------------------
+# print("\nStage 1: Training final classifier only")
+
+# model, history_stage1 = train_model(
+#     model,
+#     train_loader,
+#     val_loader,
+#     criterion,
+#     optimizer,
+#     epochs_stage1
+# )
+
+# # -----------------------------
+# # STAGE 2: FINE-TUNE LAYER4 + FC
+# # -----------------------------
+# print("\nStage 2: Fine-tuning layer4 and fc")
+
+# for name, param in model.named_parameters():
+#     if "layer4" in name or "fc" in name:
+#         param.requires_grad = True
+
+# optimizer = optim.Adam(
+#     filter(lambda p: p.requires_grad, model.parameters()),
+#     lr=1e-4
+# )
+
+# model, history_stage2 = train_model(
+#     model,
+#     train_loader,
+#     val_loader,
+#     criterion,
+#     optimizer,
+#     epochs_stage2
+# )
+
+# # -----------------------------
+# # TEST EVALUATION
+# # -----------------------------
+# test_acc = evaluate(model, test_loader)
+# print(f"\nFinal Test Accuracy: {test_acc:.4f}")
+
+# # -----------------------------
+# # SAVE MODEL
+# # -----------------------------
+# model_path = os.path.join(base_dir, "resnet18_gtsrb_transfer.pth")
+# torch.save(model.state_dict(), model_path)
+# print(f"Model saved successfully at: {model_path}")
+
+
+
+
+
 import os
 import copy
 import pandas as pd
@@ -22,12 +380,6 @@ batch_size = 32
 epochs_stage1 = 5
 epochs_stage2 = 5
 
-# Build paths relative to this Python file
-
- 
-# base_dir = os.path.dirname(os.path.abspath(__file__))
-# root_dir = os.path.join(base_dir, "archive")
-
 base_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = base_dir
 train_csv_path = os.path.join(root_dir, "Train.csv")
@@ -37,7 +389,9 @@ print("Current device:", device)
 print("Base directory:", base_dir)
 print("Root directory:", root_dir)
 
-# Quick path checks
+# -----------------------------
+# PATH CHECKS
+# -----------------------------
 if not os.path.exists(root_dir):
     raise FileNotFoundError(f"Could not find dataset folder: {root_dir}")
 
@@ -47,8 +401,15 @@ if not os.path.exists(train_csv_path):
 if not os.path.exists(test_csv_path):
     raise FileNotFoundError(f"Could not find Test.csv: {test_csv_path}")
 
-print("Files inside archive folder:")
+print("\nFiles inside archive folder:")
 print(os.listdir(root_dir))
+
+print("\nFirst 5 folders inside Train:")
+print(os.listdir(os.path.join(root_dir, "Train"))[:5])
+
+df_debug = pd.read_csv(train_csv_path)
+print("\nFirst 10 CSV paths:")
+print(df_debug["Path"].head(10).tolist())
 
 # -----------------------------
 # TRANSFORMS
@@ -82,7 +443,6 @@ class GTSRBDataset(Dataset):
         self.root_dir = root_dir
         self.transform = transform
 
-        # Make sure required columns exist
         required_columns = ["Path", "ClassId"]
         for col in required_columns:
             if col not in self.data.columns:
@@ -95,13 +455,25 @@ class GTSRBDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        img_relative_path = self.data.iloc[idx]["Path"]
+        img_relative_path = str(self.data.iloc[idx]["Path"]).strip()
         label = int(self.data.iloc[idx]["ClassId"])
+
+        # normalize slashes
+        img_relative_path = img_relative_path.replace("\\", os.sep).replace("/", os.sep)
+
+        # remove accidental leading "./"
+        if img_relative_path.startswith("." + os.sep):
+            img_relative_path = img_relative_path[2:]
 
         img_path = os.path.join(self.root_dir, img_relative_path)
 
         if not os.path.exists(img_path):
-            raise FileNotFoundError(f"Image not found: {img_path}")
+            raise FileNotFoundError(
+                f"\nImage not found.\n"
+                f"Row index: {idx}\n"
+                f"CSV path: {img_relative_path}\n"
+                f"Full path tried: {img_path}\n"
+            )
 
         image = Image.open(img_path).convert("RGB")
 
@@ -125,7 +497,7 @@ test_dataset = GTSRBDataset(
     transform=val_test_transform
 )
 
-print("Total training images:", len(full_train_dataset))
+print("\nTotal training images:", len(full_train_dataset))
 print("Total test images:", len(test_dataset))
 
 # -----------------------------
@@ -135,19 +507,15 @@ train_size = int(0.8 * len(full_train_dataset))
 val_size = len(full_train_dataset) - train_size
 
 generator = torch.Generator().manual_seed(42)
-train_dataset, val_dataset = random_split(
+train_subset, val_subset = random_split(
     full_train_dataset,
     [train_size, val_size],
     generator=generator
 )
 
-# Important note:
-# random_split creates subsets that still point to the same dataset object.
-# So changing dataset.transform affects both subsets.
-# To avoid that issue cleanly, we rebuild separate datasets below.
-
-train_indices = train_dataset.indices
-val_indices = val_dataset.indices
+# rebuild split CSVs so train and validation can use different transforms
+train_indices = train_subset.indices
+val_indices = val_subset.indices
 
 full_train_data = pd.read_csv(train_csv_path)
 
@@ -187,17 +555,16 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 # -----------------------------
 model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 
-# Freeze all pretrained layers first
+# freeze pretrained layers
 for param in model.parameters():
     param.requires_grad = False
 
-# Replace final fully connected layer
+# replace final layer
 model.fc = nn.Linear(model.fc.in_features, num_classes)
-
 model = model.to(device)
 
 # -----------------------------
-# LOSS FUNCTION + OPTIMIZER
+# LOSS + OPTIMIZER
 # -----------------------------
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.fc.parameters(), lr=0.001)
@@ -285,31 +652,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, epochs):
     return model, history
 
 # -----------------------------
-# EVALUATION FUNCTION
-# -----------------------------
-def evaluate(model, loader):
-    model.eval()
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for inputs, labels in loader:
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-
-            outputs = model(inputs)
-            _, preds = torch.max(outputs, 1)
-
-            correct += torch.sum(preds == labels).item()
-            total += labels.size(0)
-
-    return correct / total
-
-# -----------------------------
 # STAGE 1: TRAIN FINAL CLASSIFIER ONLY
 # -----------------------------
 print("\nStage 1: Training final classifier only")
-
 model, history_stage1 = train_model(
     model,
     train_loader,
@@ -343,25 +688,11 @@ model, history_stage2 = train_model(
 )
 
 # -----------------------------
-# TEST EVALUATION
-# -----------------------------
-test_acc = evaluate(model, test_loader)
-print(f"\nFinal Test Accuracy: {test_acc:.4f}")
-
-# -----------------------------
 # SAVE MODEL
 # -----------------------------
 model_path = os.path.join(base_dir, "resnet18_gtsrb_transfer.pth")
 torch.save(model.state_dict(), model_path)
-print(f"Model saved successfully at: {model_path}")
-
-
-
-
-
-
-
-# ADDED FEATURES
+print(f"\nModel saved successfully at: {model_path}")
 
 # -----------------------------
 # DETAILED TEST EVALUATION
@@ -394,42 +725,79 @@ print(f"\nFinal Test Accuracy: {test_acc:.4f}")
 print("\nClassification Report:")
 print(report)
 
+# -----------------------------
+# SAVE CLASSIFICATION REPORT
+# -----------------------------
+report_path = os.path.join(base_dir, "classification_report_resnet18.txt")
+with open(report_path, "w") as f:
+    f.write(f"Final Test Accuracy: {test_acc:.4f}\n\n")
+    f.write("Classification Report:\n")
+    f.write(report)
 
-
-# Added features
-
-
+print(f"Classification report saved successfully at: {report_path}")
 
 # -----------------------------
-# PLOT CONFUSION MATRIX
+# PLOT + SAVE CONFUSION MATRIX
 # -----------------------------
-plt.figure(figsize=(16, 12))
-plt.imshow(cm, interpolation='nearest')
-plt.title("Confusion Matrix - ResNet18 on GTSRB")
-plt.colorbar()
-plt.xlabel("Predicted Label")
-plt.ylabel("True Label")
-plt.show()
-
+cm_path = os.path.join(base_dir, "confusion_matrix_resnet18.png")
 
 plt.figure(figsize=(16, 12))
-plt.imshow(cm, interpolation='nearest')
+plt.imshow(cm, interpolation="nearest")
 plt.title("Confusion Matrix - ResNet18 on GTSRB")
 plt.colorbar()
 plt.xlabel("Predicted Label")
 plt.ylabel("True Label")
 plt.tight_layout()
-plt.savefig("confusion_matrix_resnet18.png")
+plt.savefig(cm_path)
 plt.show()
 
+print(f"Confusion matrix saved successfully at: {cm_path}")
 
+# -----------------------------
+# PLOT + SAVE TRAINING CURVES
+# -----------------------------
+train_accs = history_stage1["train_acc"] + history_stage2["train_acc"]
+val_accs = history_stage1["val_acc"] + history_stage2["val_acc"]
+train_losses = history_stage1["train_loss"] + history_stage2["train_loss"]
+val_losses = history_stage1["val_loss"] + history_stage2["val_loss"]
 
+acc_curve_path = os.path.join(base_dir, "accuracy_curve_resnet18.png")
+loss_curve_path = os.path.join(base_dir, "loss_curve_resnet18.png")
 
-with open("classification_report_resnet18.txt", "w") as f:
-    f.write(f"Final Test Accuracy: {test_acc:.4f}\n\n")
-    f.write("Classification Report:\n")
-    f.write(report)
+plt.figure(figsize=(8, 5))
+plt.plot(train_accs, label="Train Accuracy")
+plt.plot(val_accs, label="Validation Accuracy")
+plt.title("Training and Validation Accuracy")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.tight_layout()
+plt.savefig(acc_curve_path)
+plt.show()
 
-print("Classification report saved successfully!")
+plt.figure(figsize=(8, 5))
+plt.plot(train_losses, label="Train Loss")
+plt.plot(val_losses, label="Validation Loss")
+plt.title("Training and Validation Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.legend()
+plt.tight_layout()
+plt.savefig(loss_curve_path)
+plt.show()
 
+print(f"Accuracy curve saved successfully at: {acc_curve_path}")
+print(f"Loss curve saved successfully at: {loss_curve_path}")
 
+# -----------------------------
+# PRINT SUMMARY
+# -----------------------------
+print("\nSummary of Recorded Training Results and Observations:")
+print("1. The ResNet18 transfer learning model was trained in two stages.")
+print("2. Stage 1 trained only the final classification layer.")
+print("3. Stage 2 fine-tuned deeper layers (layer4) and the final layer.")
+print("4. Final test accuracy was recorded above.")
+print("5. The classification report shows precision, recall, and F1-score for each class.")
+print("6. The confusion matrix helps identify which classes were correctly predicted and which classes were confused.")
+print("7. If most values are concentrated along the diagonal of the confusion matrix, the model performed well.")
+print("8. Transfer learning usually performs better than a baseline CNN because pretrained features help the model generalize better.")
