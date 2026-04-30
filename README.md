@@ -7,23 +7,32 @@ This repository contains the implementation, datasets, models, and evaluation re
 ### Included Files & Folders
 
 - **archive/**
+
   - Contains the dataset used for training and testing the models.
 
 - **TrafficSignRecogPPT.pdf**
+
   - Presentation slides explaining the project, methodology, and results.
 
 - **scores.txt**
+
   - Contains performance scores for all models:
     - Pre-tuning results
     - Post-tuning results
 
 - **Model Folders**
+
   - Each model is stored in its respective folder.
   - Includes trained weights, configurations, and related files.
 
 - **models.jpynb**
+
   - Jupyter Notebook containing:
     - Model implementations
     - Training processes
     - Evaluation results
+
+**DS\_Project\_Report.pdf**
+  - Comprehensive report detailing the project methodology, dataset preprocessing, model architectures, tuning strategies, and final analysis of results.
+
 
