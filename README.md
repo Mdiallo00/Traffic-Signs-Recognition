@@ -26,4 +26,4 @@ This repository contains the implementation, datasets, models, and evaluation re
     - Model implementations
     - Training processes
     - Evaluation results
-    - Comparison of outcomes
+
